@@ -4,6 +4,8 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.distributions import Normal
+from scipy.special import loggamma
+
 
 def squared_error(C, alphas, betas, mask):
     '''
@@ -16,6 +18,35 @@ def squared_error(C, alphas, betas, mask):
     preds = alphas / (alphas + betas)
     
     return torch.square(preds - C)
+
+
+def beta_log_lik_np(C, alphas, betas, mask, reduce_axis=2, ret_mus=None, ret_sigmas=None, return_gts=None):
+    '''
+    C:  T x batch x 45
+    alpha_c: T x batch x 45
+    alpha_c: T x batch x 45
+    '''
+#     print(C.shape, alphas.shape, betas.shape, mask.shape)
+    assert not (C*(1-mask) < 0).any()
+    assert not (C >= 1).any()
+    log_likelihoods = (alphas - 1) * np.log(np.maximum(C, 0)) + (betas - 1) * np.log(1-C)
+    assert not np.logical_and(np.isnan(log_likelihoods), (mask == 0)).any(), \
+        (np.logical_and(np.isnan(np.log(np.maximum(C, 0))), (mask == 0)).any(),
+        np.logical_and(np.isnan(np.log(1-C)), (mask == 0)).any(),
+         np.logical_and(np.isnan(alphas), (mask == 0)).any(),
+        np.logical_and(np.isnan(betas), (mask == 0)).any(),
+        )
+    log_likelihoods += loggamma(alphas + betas) - loggamma(alphas) - loggamma(betas)
+    assert not np.logical_and(np.isnan(log_likelihoods), (mask == 0)).any(), \
+        (np.logical_and(np.isnan(np.log(np.maximum(C, 0))), (mask == 0)).any(),
+        np.logical_and(np.isnan(np.log(1-C)), (mask == 0)).any(),
+         np.logical_and(np.isnan(alphas), (mask == 0)).any(),
+        np.logical_and(np.isnan(betas), (mask == 0)).any(),
+        )
+    assert not np.logical_and(np.isnan(log_likelihoods), (mask == 0)).any()
+    
+    log_l =  -1 * (np.nan_to_num(log_likelihoods) * (1-mask)).sum(axis=reduce_axis)
+    return log_l
 
 
 def beta_ll_loss(C, alphas, betas, mask, reduce_axis=2, ret_mus=None, ret_sigmas=None, return_gts=None):
